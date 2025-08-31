@@ -1,0 +1,2 @@
+# CircularBuffer
+Templated circular buffer.
