@@ -2,9 +2,12 @@
 #define CIRCULAR_BUFFER_H
 
 #include <array>
-#include "../../utilities/PCH.h"
-#include "../states/BufferState.h"
 
+struct BufferState
+{
+    int MaximumElements;
+    std::size_t ElementSize;
+}
 
 template<typename T, std::size_t Size>
 class CircularBuffer final
