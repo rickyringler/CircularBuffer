@@ -1,99 +1,98 @@
 #ifndef CIRCULAR_BUFFER_H
 #define CIRCULAR_BUFFER_H
 
-#include <array>
+typedef unsigned int MemorySize;
 
-struct BufferState
-{
-    int MaximumElements;
-    std::size_t ElementSize;
-}
-
-template<typename T, std::size_t Size>
+template<typename T, MemorySize Size>
 class CircularBuffer final
 {
     public:
 
     static_assert(Size > 0, "Why would you even attempt to allocate a negative quantity of memory?");
+    static_assert((Size & (Size - 1)) == 0, "Size must be a power of two.");
 
-    CircularBuffer(std::size_t ElementSize, std::size_t MaximumElements);
-    ~CircularBuffer();
 
-    [[nodiscard]] inline const std::size_t* GetSizeElements()    const {return this->Elements;};
-    [[nodiscard]] inline const std::size_t* GetElementSize()     const noexcept;
-    [[nodiscard]] inline const std::size_t* GetMaximumElements() const noexcept;
-    bool                  Push(const T& Data) noexcept;
-    bool                  Pop() noexcept;
+    CircularBuffer(MemorySize SizeOfElement, unsigned int MaximumElements);
+    ~CircularBuffer()=default;
+    CircularBuffer(const CircularBuffer&)=delete;
+    CircularBuffer& operator=(const CircularBuffer&)=delete;
+
+    [[nodiscard]] inline const unsigned int GetCountOfElements() const {return ((Head - Tail) & Mask);};
+    [[nodiscard]] inline const unsigned int GetMaximumElements() const noexcept;
+    [[nodiscard]] inline const MemorySize   GetSizeOfElement()   const noexcept;
+    [[gnu::hot]]         const bool         Push(const T* Data) noexcept;
+    [[gnu::hot]]         const bool         Pop() noexcept;
+    [[gnu::hot]]         const bool         Flush();
+    [[gnu::hot]]         const T* const     GetElement(unsigned int Index) const noexcept;
 
     private:
 
-    static constexpr std::size_t Mask = Size - 1;
-    std::array<T, Size> Buffer{};
-    std::size_t  Head;
-    std::size_t  Tail;
-    std::size_t  Elements;
-    BufferState* State    = nullptr;
+    const T* Buffer[Size] = {};
+    unsigned int Head = 0;
+    unsigned int Tail = 0;
+    unsigned int MaximumElements = 0;
+    MemorySize   SizeOfElement = 0;
+    static constexpr unsigned int Mask = Size - 1;
 
-    [[nodiscard]] inline constexpr bool BufferEmpty()        const noexcept{ return Head==Tail;};
-    [[nodiscard]] inline constexpr bool BufferFull()         const noexcept{ return Buffer.size() == Size;};
-    bool                  Initialize(std::size_t ElementSize, std::size_t MaximumElements) noexcept;
+    [[nodiscard]] inline constexpr bool BufferEmpty()const noexcept{ return Head==Tail;};
+    [[nodiscard]] inline constexpr bool BufferFull() const noexcept{ return ((Head+1)& Mask)==Tail;};
+    inline __attribute__((always_inline)) void Reset() noexcept{ Tail=0, Head=0;};
+    inline __attribute__((always_inline)) void AdvanceTail() noexcept{ Tail = (Tail+1) & Mask;};
+    inline __attribute__((always_inline)) void AdvanceHead() noexcept{ Head = (Head+1) & Mask;};
 };
 
-template<typename T, std::size_t Size>
-CircularBuffer<T, Size>::CircularBuffer(const std::size_t ElementSize, const std::size_t MaximumElements)
+template<typename T, MemorySize Size>
+CircularBuffer<T, Size>::CircularBuffer(const MemorySize SizeOfElement, const unsigned int MaximumElements)
+    : MaximumElements(MaximumElements), SizeOfElement(SizeOfElement)
 {
-    Initialize(ElementSize, MaximumElements);
 }
 
-template<typename T, std::size_t Size>
-CircularBuffer<T, Size>::~CircularBuffer()
+template<typename T, MemorySize Size>
+inline const MemorySize CircularBuffer<T, Size>::GetSizeOfElement() const noexcept
 {
-    delete this->State;
+    return SizeOfElement;
 }
 
-template<typename T, std::size_t Size>
-bool CircularBuffer<T, Size>::Initialize(std::size_t ElementSize, std::size_t MaximumElements) noexcept
+template<typename T, MemorySize Size>
+inline const unsigned int CircularBuffer<T, Size>::GetMaximumElements() const noexcept
 {
-    this->State = new BufferState;
-    this->State->ElementSize = &ElementSize;
-    this->State->MaximumElements = &MaximumElements;
-    return true;
+    return MaximumElements;
 }
 
-template<typename T, std::size_t Size>
-inline const std::size_t* CircularBuffer<T, Size>::GetElementSize() const noexcept
-{
-    return this->State->GetElementSize();
-}
-
-template<typename T, std::size_t Size>
-inline const std::size_t* CircularBuffer<T, Size>::GetMaximumElements() const noexcept
-{
-    return this->State->GetMaximumElements();
-}
-
-template<typename T, std::size_t Size>
-bool CircularBuffer<T, Size>::Push(const T& Data) noexcept
+template<typename T, MemorySize Size>
+[[gnu::hot]] const bool CircularBuffer<T, Size>::Push(const T* Data) noexcept
 {
     [[unlikely]]if (BufferFull()) return false;
-
     Buffer[Head] = Data;
-    Head = (Head + 1) & Mask;
-
-    ++Elements;
-
+    AdvanceHead();
     return true;
 }
 
-template<typename T, std::size_t Size>
-bool CircularBuffer<T, Size>::Pop() noexcept
+template<typename T, MemorySize Size>
+[[gnu::hot]] const bool CircularBuffer<T, Size>::Pop() noexcept
 {
     [[unlikely]]if (BufferEmpty()) return false;
-
-    Tail = (Tail + 1) & Mask;
-
-    --Elements;
-
+    AdvanceTail();
     return true;
 }
+template<typename T, MemorySize Size>
+[[gnu::hot]] const bool CircularBuffer< T, Size>::Flush()
+{
+    for (const T* Element : Buffer)
+    {
+        Element = nullptr;
+    }
+    Reset();
+    return true;
+}
+
+template<typename T, MemorySize Size>
+[[gnu::hot]] const T* const CircularBuffer<T, Size>::GetElement(const unsigned int Index) const noexcept
+{
+    [[unlikely]]if (BufferEmpty()) return nullptr;
+    [[unlikely]]if (Index >= GetCountOfElements()) return nullptr;
+    return Buffer[(Tail + Index) & Mask];
+}
+
+#endif
 
