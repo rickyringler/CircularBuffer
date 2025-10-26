@@ -9,7 +9,8 @@ class CircularBuffer final
     public:
 
     static_assert(Size > 0, "Why would you even attempt to allocate a negative quantity of memory?");
-    static_assert((Size & (Size - 1)) == 0, "Size must be a power of two.");
+    static constexpr unsigned char SizeLSB = Size & (Size-1);
+    static_assert(SizeLSB == 0, "Size must be a power of two.");
 
 
     CircularBuffer(MemorySize SizeOfElement, unsigned int MaximumElements);
